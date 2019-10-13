@@ -2,6 +2,9 @@
 
 RESTful web services
 
+ER: person(PK personId) <-> address(PK id, FK personId)
+                        <-> communication(PK id, FK personId)
+
 Get Glassfish
 
 Create Derby database jdbc:derby://localhost:1527/contacts [root on ROOT] w/ username ROOT,
