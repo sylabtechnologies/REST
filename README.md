@@ -1,7 +1,11 @@
-# REST
+# REST - caution: Glassfish 4.1.1 bombs Json
+
 RESTful web services
 
-Start Netbeans and run
+Get Glassfish
 
-Person(PK personId) - key to -> address(PK id, FK personId)
-                    - key to -> communication(PK id, FK personId)
+Create Derby database jdbc:derby://localhost:1527/contacts [root on ROOT] w/ username ROOT,
+run createTables
+
+Start Netbeans and run both services
+
