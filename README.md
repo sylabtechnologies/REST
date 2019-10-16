@@ -3,6 +3,7 @@
 -- RESTful web services --
 
 ER: person(PK personId) <-> address(PK id, FK personId)
+
                         <-> communication(PK id, FK personId)
 
 Get Glassfish
