@@ -1,9 +1,11 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <!DOCTYPE properties SYSTEM "http://java.sun.com/dtd/properties.dtd">
 <properties>
-<comment>ContactPayments database connector</comment>
+<comment>Codegen leaf primitives</comment>
 <entry key="DATABASE_URL">jdbc:derby://localhost:1527/</entry>
 <entry key="DATABASE">contacts</entry>
 <entry key="USER">root</entry>
 <entry key="PASSWORD">password</entry>
+<entry key="COLUMNNUMBER">10</entry>
+<entry key="MAXFIELD">2500</entry>
 </properties>

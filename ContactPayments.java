@@ -1,15 +1,14 @@
 /**
- * @author D.S.
- * @version 1.0
- * @param the name of the csv file (the file records will be validated to have NUM_COLUMNS columns)
- * @see more at ContactPayments.java :
- * 
- * run as : ContactPayments CsvFileName (w/o extension)
- * set up the database in ContactPayments-pros properties file
- * a table w/ CsvFileName will be created
- * w/ a rowId key plus NUM_COLUMNS columns
- * 
- */
+@author D
+@version 1.0
+@param CsvFileName
+@ set up the db connector and table params in ContactPayments-pros.xml
+@ clear CsvFileName table
+@ assume first csv record are column headers
+@ write all records into CsvFileName table
+@ as rowId + NUM_COLUMNS columns
+@ write all bad records into CsvFileName-bad.csv
+*/
 
 package contactpayments;
 import java.util.Properties;
@@ -18,6 +17,9 @@ import java.sql.SQLException;
 import com.sun.rowset.CachedRowSetImpl;
 import java.sql.ResultSetMetaData;
 import javax.sql.rowset.CachedRowSet;
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVParser;
+import org.apache.commons.csv.CSVRecord;
 
 public class ContactPayments
 {
@@ -32,18 +34,25 @@ public class ContactPayments
         }
     }
     
+    // @param db config
     private final static String DATABASE = props.getProperty("DATABASE");
     private final static String USER     = props.getProperty("USER"); 
     private final static String PASSWORD = props.getProperty("PASSWORD");
     private final static String DATABASE_URL = props.getProperty("DATABASE_URL");
     private final static String CONNECT_TO = DATABASE_URL + DATABASE;
     //    + "?autoReconnect=true&useSSL=false";
-    private static String TABLE_NAME;
-    
-    public  final static int NUM_COLUMNS = 11;
-    private static final String MY_PRIMARY = "ENTRYID";
-    private static final int ROWSET_MAX = 500;
 
+    // @param number of columns
+    public final static int NUM_COLUMNS
+        = Integer.parseInt(props.getProperty("COLUMNNUMBER"));
+    // @param max field
+    public final static int FIELD_MAX
+        = Integer.parseInt(props.getProperty("MAXFIELD"));
+    
+    private static String TABLE_NAME;
+    private static final String MY_PRIMARY = "ENTRYID";
+
+    public final static int CACHE_MAX = 1000;
     private static int receiveCount = 0;
     private static int successCount = 0;
     private static int faultCount = 0;
@@ -76,17 +85,23 @@ public class ContactPayments
                 if (name.equals(TABLE_NAME))
                 {
                     found = true;
-                    System.out.println("delete from " + TABLE_NAME);
+                    System.out.println("Delete from " + TABLE_NAME + " table");
                     break;
                 }
             }
 
+            System.out.print("Create " + TABLE_NAME + " table with");
+            System.out.println( (NUM_COLUMNS + 1) + " columns, cut off at "
+                    + FIELD_MAX + " characters");
+            
             if (found)
                 crs.setCommand("DELETE FROM " + TABLE_NAME);
             else
                 crs.setCommand(createTable(TABLE_NAME));
             crs.execute();
             
+            crs.setCommand("SELECT * FROM " + TABLE_NAME);
+            crs.execute();
             processInput(crs, TABLE_NAME);
         }
         catch (SQLException ex) {
@@ -103,7 +118,7 @@ public class ContactPayments
         return Character.toString((char) (index + 65));
     }
 
-    // create table with A-Z columns and entryId key
+    // create primary key and A-Z columns
     private static String createTable(final String table)
     {
         StringBuilder query = new StringBuilder("CREATE TABLE ");
@@ -114,7 +129,7 @@ public class ContactPayments
         for (int i = 0; i < NUM_COLUMNS; i++)
         {
             query.append( getColumnName(i) );
-            query.append(" varchar(400),\n");
+            query.append(" varchar(" + FIELD_MAX + "),\n");
         }
 
         query.append("PRIMARY KEY ( " + MY_PRIMARY + " ))\n");
@@ -129,7 +144,9 @@ public class ContactPayments
         try
         (
             BufferedReader reader = new BufferedReader(new FileReader(table + ".csv"));
+            CSVParser parser = new CSVParser(reader, CSVFormat.RFC4180);
             BufferedWriter writer = new BufferedWriter(new FileWriter(table + "-bad.csv"));
+            BufferedWriter logger = new BufferedWriter(new FileWriter(table + ".log"));
         )
         {
             receiveCount = 0;
@@ -138,27 +155,29 @@ public class ContactPayments
             
             // ResultSetMetaData metaData = jrs.getMetaData();
             // int numberOfColumns = metaData.getColumnCount();
-
-            jrs.setCommand("SELECT * FROM " + table);
-            jrs.execute();
+            // certUtil -hashfile C:\Users\Dennis\Downloads\commons-csv-1.7-bin.zip SHA512
             
-            String line = null;
-            while ((line = reader.readLine()) != null)
+            for (CSVRecord record : parser)
             {
                 receiveCount++;
+                if (receiveCount == 1)
+                {
+                    System.out.println("Skip " + record);
+                    continue;
+                }
 
                 jrs.moveToInsertRow();
-                
+
                 CsvEntry entry = null;
                 try
                 {
-                    entry = new CsvEntry(line);
+                    entry = new CsvEntry(record);
                     successCount++;
                 }
                 catch (IllegalArgumentException ex)
                 {
                     faultCount++;
-                    writer.write(line + "\n");
+                    writer.write(record.toString() + "\n");
                 }
                 
                 if (entry != null)
@@ -169,17 +188,13 @@ public class ContactPayments
                     {
                         String col = getColumnName(i);
                         String val = entry.getField(i);
-                        // force truncation
-                        if (val.length() > 400)
-                            val = val.substring(0, 400);
-                        
                         jrs.updateString(col, val);
                     }
 
                     jrs.insertRow();
                     jrs.moveToCurrentRow();
-                    
-                    if (successCount % ROWSET_MAX == 0)
+
+                    if (successCount % CACHE_MAX == 0)
                     {
                         System.out.println("Rows commited: " + successCount);
                         jrs.acceptChanges();
@@ -188,15 +203,21 @@ public class ContactPayments
             }
 
             jrs.moveToCurrentRow();
-            if (successCount % ROWSET_MAX != 0)
+            if (successCount % CACHE_MAX != 0)
+            {
+                System.out.println("Rows commited: " + successCount);
                 jrs.acceptChanges();
+            }
             
             writer.flush();
-            System.out.println("Total rows received: " + receiveCount);
-            System.out.println("Total rows processed: " + successCount);
-            System.out.println("Total rows failed: " + faultCount);
+            
+            logger.write("Total rows received: " + (receiveCount - 1) + "\n");
+            logger.write("Total rows processed: " + successCount + "\n");
+            logger.write("Total rows failed: " + faultCount + "\n");
+            logger.flush();
         }
-        catch (IOException ex) {
+        catch (IOException ex)
+        {
             ex.printStackTrace();
         }
     }
